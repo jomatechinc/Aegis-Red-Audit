@@ -1,0 +1,6 @@
+{
+  "name": "Aegis Red Audit",
+  "description": "Defensive red team security auditing, asset management, and passive threat intelligence lookup tool.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
