@@ -16,6 +16,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import android.widget.Toast
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -33,6 +37,7 @@ fun AssetDetailScreen(
     viewModel: SecurityViewModel,
     onNavigateBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val assets by viewModel.assets.collectAsState()
     val scans by viewModel.scans.collectAsState()
     val isScanningId by viewModel.isScanning.collectAsState()
@@ -103,15 +108,32 @@ fun AssetDetailScreen(
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp
             )
-            IconButton(
-                onClick = { viewModel.startLiveScan(asset, "Vulnerability Sweep") },
-                enabled = !isScanningThis,
-                modifier = Modifier.testTag("detail_refresh_scan")
-            ) {
-                if (isScanningThis) {
-                    CircularProgressIndicator(color = AuditingCrimson, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                } else {
-                    Icon(imageVector = Icons.Default.Refresh, contentDescription = "Re-Scan Target", tint = AuditingCrimson)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = {
+                        val report = SecurityReportExporter.generateAssetReportMarkdown(
+                            asset = asset,
+                            scan = activeScan,
+                            findings = findings,
+                            intel = threatIntel
+                        )
+                        SecurityReportExporter.shareReport(context, "Executive Security Audit Report - ${asset.name}", report)
+                    },
+                    modifier = Modifier.testTag("export_report_button")
+                ) {
+                    Icon(imageVector = Icons.Default.Share, contentDescription = "Export Audit Report", tint = CyanIntel)
+                }
+
+                IconButton(
+                    onClick = { viewModel.startLiveScan(asset, "Vulnerability Sweep") },
+                    enabled = !isScanningThis,
+                    modifier = Modifier.testTag("detail_refresh_scan")
+                ) {
+                    if (isScanningThis) {
+                        CircularProgressIndicator(color = AuditingCrimson, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                    } else {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = "Re-Scan Target", tint = AuditingCrimson)
+                    }
                 }
             }
         }
@@ -460,6 +482,8 @@ fun AssetDetailScreen(
 
 @Composable
 fun DetailedFindingCard(finding: ScanFinding) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     val severityColor = when (finding.severity.uppercase()) {
         "CRITICAL" -> AuditingCrimson
         "HIGH" -> AuditingCrimson
@@ -467,13 +491,31 @@ fun DetailedFindingCard(finding: ScanFinding) {
         else -> DefendingGreen
     }
 
+    // Generate practical devops / server config remediation code snippet
+    val codeSnippet = remember(finding) {
+        when {
+            finding.title.contains("Strict-Transport-Security", ignoreCase = true) || finding.title.contains("HSTS", ignoreCase = true) ->
+                "# Nginx Configuration\nadd_header Strict-Transport-Security \"max-age=31536000; includeSubDomains; preload\" always;"
+            finding.title.contains("Content-Security-Policy", ignoreCase = true) || finding.title.contains("CSP", ignoreCase = true) ->
+                "# Nginx Header Patch\nadd_header Content-Security-Policy \"default-src 'self'; script-src 'self'; object-src 'none';\" always;"
+            finding.title.contains("X-Frame-Options", ignoreCase = true) || finding.title.contains("Clickjacking", ignoreCase = true) ->
+                "# Security Header Patch\nadd_header X-Frame-Options \"DENY\" always;\nadd_header X-Content-Type-Options \"nosniff\" always;"
+            finding.title.contains("TLS", ignoreCase = true) || finding.title.contains("SSL", ignoreCase = true) ->
+                "# Nginx Modern TLS Config\nssl_protocols TLSv1.2 TLSv1.3;\nssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;"
+            finding.title.contains("Port", ignoreCase = true) || finding.title.contains("Open", ignoreCase = true) ->
+                "# Linux UFW Firewall Rule\nsudo ufw deny 21/tcp\nsudo ufw deny 23/tcp\nsudo ufw reload"
+            else ->
+                "# Remediate ${finding.title}\n# Follow security policy guidelines:\n# ${finding.recommendation}"
+        }
+    }
+
     Card(
         colors = CardDefaults.cardColors(containerColor = SurfaceGunmetal),
         border = BorderStroke(1.dp, SurfaceGunmetalLight),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -481,7 +523,8 @@ fun DetailedFindingCard(finding: ScanFinding) {
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
                     Box(
                         modifier = Modifier
@@ -492,7 +535,8 @@ fun DetailedFindingCard(finding: ScanFinding) {
                         text = finding.title,
                         color = BrightWhiteText,
                         fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
                     )
                 }
                 Badge(
@@ -513,7 +557,7 @@ fun DetailedFindingCard(finding: ScanFinding) {
 
             Spacer(modifier = Modifier.height(10.dp))
             HorizontalDivider(color = SurfaceGunmetalLight)
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -540,6 +584,64 @@ fun DetailedFindingCard(finding: ScanFinding) {
                         text = finding.recommendation,
                         color = BrightWhiteText,
                         fontSize = 11.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Copyable Remediation Code Patch snippet
+            Card(
+                colors = CardDefaults.cardColors(containerColor = TacticalDark),
+                border = BorderStroke(1.dp, BorderMuted),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "CONFIG PATCH SNIPPET",
+                            color = CyanIntel,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clickable {
+                                    clipboardManager.setText(AnnotatedString(codeSnippet))
+                                    Toast.makeText(context, "Remediation patch copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(2.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy Patch",
+                                tint = CyanIntel,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "COPY PATCH",
+                                color = CyanIntel,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = codeSnippet,
+                        color = BrightWhiteText,
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        lineHeight = 14.sp
                     )
                 }
             }

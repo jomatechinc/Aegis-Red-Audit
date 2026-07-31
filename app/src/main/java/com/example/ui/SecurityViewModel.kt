@@ -234,4 +234,43 @@ class SecurityViewModel(application: Application) : AndroidViewModel(application
             }
         }
     }
+
+    fun loadBenchmarkTargets() {
+        viewModelScope.launch {
+            val benchmarkAssets = listOf(
+                Asset(
+                    name = "Production API Gateway",
+                    url = "api.stripe.com",
+                    description = "Core PCI-DSS payment routing gateway.",
+                    category = "API Server",
+                    tags = "production,pci-dss,public"
+                ),
+                Asset(
+                    name = "Kubernetes Ingress Node",
+                    url = "ingress.github.com",
+                    description = "Edge routing and load balancer proxy node.",
+                    category = "Infrastructure",
+                    tags = "prod,k8s,ingress"
+                ),
+                Asset(
+                    name = "Corporate DNS Resolver",
+                    url = "1.1.1.1",
+                    description = "Primary recursive DNS server.",
+                    category = "Internal Host",
+                    tags = "dns,cloudflare,core"
+                ),
+                Asset(
+                    name = "Identity SSO Provider",
+                    url = "accounts.google.com",
+                    description = "OAuth2 / OIDC authentication portal.",
+                    category = "Web Application",
+                    tags = "auth,sso,critical"
+                )
+            )
+            for (bAsset in benchmarkAssets) {
+                val insertedId = repository.insertAsset(bAsset)
+                startLiveScan(bAsset.copy(id = insertedId.toInt()), "Vulnerability Sweep")
+            }
+        }
+    }
 }

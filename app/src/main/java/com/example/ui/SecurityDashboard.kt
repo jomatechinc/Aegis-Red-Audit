@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -38,12 +40,14 @@ fun SecurityDashboard(
     onNavigateToAsset: (Asset) -> Unit,
     onNavigateToAssetList: () -> Unit
 ) {
+    val context = LocalContext.current
     val assets by viewModel.assets.collectAsState()
     val scans by viewModel.scans.collectAsState()
 
     var selectedSeverityFilter by remember { mutableStateOf("ALL") }
     var selectedCategoryFilter by remember { mutableStateOf("ALL") }
     var selectedTargetFilter by remember { mutableStateOf("ALL") }
+    var showRulesDialog by remember { mutableStateOf(false) }
 
     // Aggregate statistics
     val totalAssets = assets.size
@@ -93,54 +97,120 @@ fun SecurityDashboard(
     ) {
         // --- HEADER ---
         item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "OPERATION CONSOLE",
-                        color = MutedGreyText,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        letterSpacing = 1.5.sp
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
                         Text(
-                            text = "AegisRed ",
-                            color = BrightWhiteText,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = (-0.5).sp
+                            text = "OPERATION CONSOLE",
+                            color = MutedGreyText,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 1.5.sp
                         )
-                        Text(
-                            text = "Nexus",
-                            color = AuditingCrimson,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = (-0.5).sp
-                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "AegisRed ",
+                                color = BrightWhiteText,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = (-0.5).sp
+                            )
+                            Text(
+                                text = "Nexus",
+                                color = AuditingCrimson,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = (-0.5).sp
+                            )
+                        }
+                    }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Export Fleet Report
+                        IconButton(
+                            onClick = {
+                                if (assets.isEmpty()) {
+                                    Toast.makeText(context, "No assets recorded to export.", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    val masterReport = SecurityReportExporter.generateFleetSummaryReport(assets, scans)
+                                    SecurityReportExporter.shareReport(context, "Master Fleet Audit Summary", masterReport)
+                                }
+                            },
+                            modifier = Modifier.testTag("export_master_report_button")
+                        ) {
+                            Icon(imageVector = Icons.Default.Share, contentDescription = "Export Master Fleet Report", tint = CyanIntel)
+                        }
+
+                        // Load Benchmark Data
+                        IconButton(
+                            onClick = {
+                                viewModel.loadBenchmarkTargets()
+                                Toast.makeText(context, "Enterprise benchmark targets loaded!", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.testTag("load_benchmark_button")
+                        ) {
+                            Icon(imageVector = Icons.Default.PlaylistAdd, contentDescription = "Load Enterprise Benchmarks", tint = AccentAmber)
+                        }
+
+                        // Rules of Engagement / Regulatory Policy Notice
+                        IconButton(
+                            onClick = { showRulesDialog = true },
+                            modifier = Modifier.testTag("rules_of_engagement_button")
+                        ) {
+                            Icon(imageVector = Icons.Default.Gavel, contentDescription = "Rules of Engagement Notice", tint = DefendingGreen)
+                        }
                     }
                 }
 
-                // Decorative Shield with Heart icon wrapper from design HTML
-                Box(
-                    modifier = Modifier
-                        .size(46.dp)
-                        .background(SurfaceGunmetalLight, RoundedCornerShape(16.dp))
-                        .border(1.dp, BorderMuted, RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Shield,
-                        contentDescription = "Shield Icon",
-                        tint = CyanIntel,
-                        modifier = Modifier.size(22.dp)
+                if (showRulesDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showRulesDialog = false },
+                        containerColor = SurfaceGunmetal,
+                        titleContentColor = BrightWhiteText,
+                        textContentColor = MutedGreyText,
+                        icon = {
+                            Icon(imageVector = Icons.Default.Gavel, contentDescription = null, tint = DefendingGreen, modifier = Modifier.size(32.dp))
+                        },
+                        title = {
+                            Text(
+                                text = "RULES OF ENGAGEMENT & ETHICAL SCOPE",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BrightWhiteText
+                            )
+                        },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = "AegisRed Nexus operates strictly as a defensive security auditing and passive threat intelligence verification tool.",
+                                    fontSize = 11.sp,
+                                    color = BrightWhiteText
+                                )
+                                Text(
+                                    text = "• All network requests and header sweeps must only be targeted against infrastructure you explicitly own or have written authorization to audit.\n• Passive Threat Intelligence queries utilize AbuseIPDB and VirusTotal public lookups for defender verification.\n• Operating in compliance with Google Play Store Security Software policies and OWASP Top 10 guidelines.",
+                                    fontSize = 10.sp,
+                                    color = MutedGreyText,
+                                    lineHeight = 14.sp
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showRulesDialog = false }) {
+                                Text("I ACKNOWLEDGE", color = DefendingGreen, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                            }
+                        }
                     )
                 }
             }
